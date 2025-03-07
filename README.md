@@ -63,104 +63,104 @@ where \(\Delta E\) is the energy change and \(T\) is the temperature. The use of
 
 ### XY Model Simulation
 ```bash
-    import time
-    import torch
-    
-    # Set lattice size and temperature range
-    L = 32
-    T = torch.linspace(0.6, 1.5, steps=32)
-    
-    # Initialize the XY model sampler with CUDA acceleration, AMP enabled, and parallel tempering
-    sampler_xy = XYModel(
-        L=L,
-        T=T,
-        n_chains=30,
-        adaptive=False,
-        target_acceptance=0.5,
-        adapt_rate=0.1,
-        device=torch.device("cuda"),
-        use_amp=True,
-        pt_enabled=True  # Parallel tempering enabled for better sampling
-    )
-    
-    start = time.time()
-    # Run simulation: 10000 sweeps for thermalization and 3000 sweeps for production,
-    # with samples recorded every 10 sweeps and parallel tempering every 10 sweeps.
-    samples_xy = sampler_xy(n_sweeps=3000, n_therm=10000, decorrelate=10, pt_interval=10)
-    end = time.time()
-    print(f"Elapsed time: {end - start:.2f} s")
-    print(f"Samples shape: {samples_xy.shape}")
-    
-    # Update spins with the collected samples and compute physical observables.
-    sampler_xy.spins = samples_xy
-    energy_xy = sampler_xy.compute_energy().mean(dim=1).cpu().numpy() / L**2
-    capacity_xy = sampler_xy.compute_heat_capacity().cpu().numpy()
-    stiffness_xy = sampler_xy.compute_spin_stiffness().cpu().numpy()
+import time
+import torch
+
+# Set lattice size and temperature range
+L = 32
+T = torch.linspace(0.6, 1.5, steps=32)
+
+# Initialize the XY model sampler with CUDA acceleration, AMP enabled, and parallel tempering
+sampler_xy = XYModel(
+    L=L,
+    T=T,
+    n_chains=30,
+    adaptive=False,
+    target_acceptance=0.5,
+    adapt_rate=0.1,
+    device=torch.device("cuda"),
+    use_amp=True,
+    pt_enabled=True  # Parallel tempering enabled for better sampling
+)
+
+start = time.time()
+# Run simulation: 10000 sweeps for thermalization and 3000 sweeps for production,
+# with samples recorded every 10 sweeps and parallel tempering every 10 sweeps.
+samples_xy = sampler_xy(n_sweeps=3000, n_therm=10000, decorrelate=10, pt_interval=10)
+end = time.time()
+print(f"Elapsed time: {end - start:.2f} s")
+print(f"Samples shape: {samples_xy.shape}")
+
+# Update spins with the collected samples and compute physical observables.
+sampler_xy.spins = samples_xy
+energy_xy = sampler_xy.compute_energy().mean(dim=1).cpu().numpy() / L**2
+capacity_xy = sampler_xy.compute_heat_capacity().cpu().numpy()
+stiffness_xy = sampler_xy.compute_spin_stiffness().cpu().numpy()
 
 ```
 
 ### Ising Model Simulation
 ```bash
-    import time
-    import torch
-    
-    L = 32
-    T = torch.linspace(1.0, 3.5, steps=32)
-    
-    # Initialize the Ising model sampler with CUDA acceleration and AMP enabled
-    sampler_ising = IsingModel(
-        L=L,
-        T=T,
-        n_chains=30,
-        device=torch.device("cuda"),
-        use_amp=True,
-        pt_enabled=False  
-    )
-    
-    start = time.time()
-    # Run simulation: 3000 sweeps for thermalization and 1000 sweeps for production,
-    # with samples recorded every 10 sweeps.
-    samples_ising = sampler_ising(n_sweeps=1000, n_therm=3000, decorrelate=10)
-    end = time.time()
-    print(f"Elapsed time: {end - start:.2f} s")
-    print(f"Samples shape: {samples_ising.shape}")
-    
-    sampler_ising.spins = samples_ising
-    energy_ising = sampler_ising.compute_energy().mean(dim=1).cpu().numpy() / L**2
-    capacity_ising = sampler_ising.compute_heat_capacity().cpu().numpy()
-    magnetization_ising = sampler_ising.compute_magnetization().cpu().numpy()
+import time
+import torch
+
+L = 32
+T = torch.linspace(1.0, 3.5, steps=32)
+
+# Initialize the Ising model sampler with CUDA acceleration and AMP enabled
+sampler_ising = IsingModel(
+    L=L,
+    T=T,
+    n_chains=30,
+    device=torch.device("cuda"),
+    use_amp=True,
+    pt_enabled=False  
+)
+
+start = time.time()
+# Run simulation: 3000 sweeps for thermalization and 1000 sweeps for production,
+# with samples recorded every 10 sweeps.
+samples_ising = sampler_ising(n_sweeps=1000, n_therm=3000, decorrelate=10)
+end = time.time()
+print(f"Elapsed time: {end - start:.2f} s")
+print(f"Samples shape: {samples_ising.shape}")
+
+sampler_ising.spins = samples_ising
+energy_ising = sampler_ising.compute_energy().mean(dim=1).cpu().numpy() / L**2
+capacity_ising = sampler_ising.compute_heat_capacity().cpu().numpy()
+magnetization_ising = sampler_ising.compute_magnetization().cpu().numpy()
 
 ```
 
 ### Potts Model Simulation
 ```bash
-    import time
-    import torch
-    
-    L = 32
-    T = torch.linspace(0.5, 1.5, steps=32)
-    
-    # Initialize the Potts model sampler with q=3, CUDA acceleration, and AMP enabled
-    sampler_potts = PottsModel(
-        L=L,
-        T=T,
-        q=3,
-        n_chains=30,
-        device=torch.device("cuda"),
-        use_amp=True,
-        pt_enabled=False  
-    )
-    
-    start = time.time()
-    # Run simulation: 5000 sweeps for thermalization and 1000 sweeps for production,
-    # with samples recorded every 10 sweeps.
-    samples_potts = sampler_potts(n_sweeps=1000, n_therm=5000, decorrelate=10)
-    end = time.time()
-    print(f"Elapsed time: {end - start:.2f} s")
-    print(f"Samples shape: {samples_potts.shape}")
-    
-    sampler_potts.spins = samples_potts
-    energy_potts = sampler_potts.compute_energy().mean(dim=1).cpu().numpy() / L**2
-    capacity_potts = sampler_potts.compute_heat_capacity().cpu().numpy()
+import time
+import torch
+
+L = 32
+T = torch.linspace(0.5, 1.5, steps=32)
+
+# Initialize the Potts model sampler with q=3, CUDA acceleration, and AMP enabled
+sampler_potts = PottsModel(
+    L=L,
+    T=T,
+    q=3,
+    n_chains=30,
+    device=torch.device("cuda"),
+    use_amp=True,
+    pt_enabled=False  
+)
+
+start = time.time()
+# Run simulation: 5000 sweeps for thermalization and 1000 sweeps for production,
+# with samples recorded every 10 sweeps.
+samples_potts = sampler_potts(n_sweeps=1000, n_therm=5000, decorrelate=10)
+end = time.time()
+print(f"Elapsed time: {end - start:.2f} s")
+print(f"Samples shape: {samples_potts.shape}")
+
+sampler_potts.spins = samples_potts
+energy_potts = sampler_potts.compute_energy().mean(dim=1).cpu().numpy() / L**2
+capacity_potts = sampler_potts.compute_heat_capacity().cpu().numpy()
 
 ```
