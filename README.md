@@ -10,10 +10,13 @@ This project implements Monte Carlo simulations for studying thermal phase trans
   Utilize GPU computing to significantly speed up the simulation process.
 
 - **Checkerboard Metropolis Update:**  
-  The simulation adopts a checkerboard (or red-black) update pattern. This allows for efficient and parallel updates of the lattice by splitting it into two interleaved sub-lattices.
+  The simulation adopts a checkerboard update pattern. This allows for efficient and parallel updates of the lattice by splitting it into two interleaved sub-lattices.
 
 - **Parallel Tempering:**  
-  Enhance sampling efficiency by exchanging configurations between different temperature chains. This is particularly useful near critical points to overcome local minima and achieve better convergence.
+  Enhance sampling efficiency by exchanging configurations between different temperature chains. This is particularly useful near critical points and low temperature region to overcome local minima and achieve better convergence.
+
+- **Automatic Mixed Precision (AMP):**  
+  Enable automatic mixed precision to leverage Tensor Cores on compatible GPUs for faster computation.
 
 ---
 
@@ -74,8 +77,8 @@ T = torch.linspace(0.6, 1.5, steps=32)
 sampler_xy = XYModel(
     L=L,
     T=T,
-    n_chains=30,
-    adaptive=False,
+    n_chains=30, # Number of temperature chains for parallel tempering
+    adaptive=False,  
     target_acceptance=0.5,
     adapt_rate=0.1,
     device=torch.device("cuda"),
