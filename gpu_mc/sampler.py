@@ -228,6 +228,32 @@ class XYModel(MonteCarloSampler):
         del diff_y, theta
         return (avg_links_y - (1.0 / self.T) * avg_currents2_y) / (self.L * self.L)
 
+    def compute_magnetization(self) -> Tensor:
+        r"""Compute the magnetization per site for the XY model.
+
+        Returns:
+            Tensor: Magnetization tensor.
+        """
+        theta = self.spins
+        mx = torch.cos(theta).sum(dim=(2, 3)).unsqueeze(-1)
+        my = torch.sin(theta).sum(dim=(2, 3)).unsqueeze(-1)
+        m = torch.stack([mx, my], dim=2).norm(dim=2).squeeze(dim=2)
+        del theta, mx, my
+        return m.mean(dim=1) / (self.L * self.L)
+
+    def compute_susceptibility(self) -> Tensor:
+        r"""Compute the susceptibility per site for the XY model.
+
+        Returns:
+            Tensor: Susceptibility tensor.
+        """
+        theta = self.spins
+        mx = torch.cos(theta).sum(dim=(2, 3)).unsqueeze(-1)
+        my = torch.sin(theta).sum(dim=(2, 3)).unsqueeze(-1)
+        m = torch.stack([mx, my], dim=2).norm(dim=2).squeeze(dim=2)
+        del theta, mx, my
+        return m.var(dim=1) * (1.0 / self.T) / (self.L * self.L)
+
 
 # =============================================================================
 # Subclass: IsingModel
@@ -372,6 +398,14 @@ class IsingModel(MonteCarloSampler):
             Tensor: Magnetization tensor.
         """
         return self.spins.mean(dim=(2, 3)).abs().mean(dim=1)
+
+    def compute_susceptibility(self) -> Tensor:
+        r"""Compute the susceptibility per site for the Ising model.
+
+        Returns:
+            Tensor: Susceptibility tensor.
+        """
+        return self.spins.mean(dim=(2, 3)).abs().var(dim=1) * (1.0 / self.T) / (self.L * self.L)
 
 
 # =============================================================================
