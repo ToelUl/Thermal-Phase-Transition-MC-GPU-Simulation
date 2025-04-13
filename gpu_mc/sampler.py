@@ -217,6 +217,7 @@ class XYModel(MonteCarloSampler):
 
     def compute_spin_stiffness(self) -> Tensor:
         r"""Compute the spin stiffness for the XY model.
+        https://arxiv.org/pdf/1101.3281
 
         Returns:
             Tensor: Spin stiffness tensor.
@@ -230,6 +231,7 @@ class XYModel(MonteCarloSampler):
 
     def compute_magnetization(self) -> Tensor:
         r"""Compute the magnetization per site for the XY model.
+        https://iopscience.iop.org/article/10.1088/0953-8984/4/24/011
 
         Returns:
             Tensor: Magnetization tensor.
