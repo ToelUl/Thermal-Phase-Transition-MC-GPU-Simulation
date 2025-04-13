@@ -196,7 +196,7 @@ class XYModel(MonteCarloSampler):
         Returns:
             Tensor: Energy tensor of shape [batch_size, n_chains].
         """
-        theta = self.spins
+        theta = self.spins.to(self.device)
         t_top = torch.roll(theta, shifts=1, dims=3)
         t_right = torch.roll(theta, shifts=-1, dims=2)
         E_local = torch.cos(theta - t_top) + torch.cos(theta - t_right)
@@ -221,7 +221,7 @@ class XYModel(MonteCarloSampler):
         Returns:
             Tensor: Spin stiffness tensor.
         """
-        theta = self.spins
+        theta = self.spins.to(self.device)
         diff_y = torch.roll(theta, shifts=1, dims=3) - theta
         avg_links_y = torch.cos(diff_y).sum(dim=(2, 3)).mean(dim=1)
         avg_currents2_y = (torch.sin(diff_y).sum(dim=(2, 3)) ** 2).mean(dim=1)
@@ -234,7 +234,7 @@ class XYModel(MonteCarloSampler):
         Returns:
             Tensor: Magnetization tensor.
         """
-        theta = self.spins
+        theta = self.spins.to(self.device)
         mx = torch.cos(theta).sum(dim=(2, 3)).unsqueeze(-1)
         my = torch.sin(theta).sum(dim=(2, 3)).unsqueeze(-1)
         m = torch.stack([mx, my], dim=2).norm(dim=2).squeeze(dim=2)
@@ -247,7 +247,7 @@ class XYModel(MonteCarloSampler):
         Returns:
             Tensor: Susceptibility tensor.
         """
-        theta = self.spins
+        theta = self.spins.to(self.device)
         mx = torch.cos(theta).sum(dim=(2, 3)).unsqueeze(-1)
         my = torch.sin(theta).sum(dim=(2, 3)).unsqueeze(-1)
         m = torch.stack([mx, my], dim=2).norm(dim=2).squeeze(dim=2)
@@ -372,7 +372,7 @@ class IsingModel(MonteCarloSampler):
         Returns:
             Tensor: Energy tensor with shape [batch_size, n_chains].
         """
-        s = self.spins
+        s = self.spins.to(self.device)
         s_up = torch.roll(s, shifts=1, dims=2)
         s_right = torch.roll(s, shifts=-1, dims=3)
         E_local = s * s_up + s * s_right
@@ -405,7 +405,7 @@ class IsingModel(MonteCarloSampler):
         Returns:
             Tensor: Susceptibility tensor.
         """
-        return self.spins.mean(dim=(2, 3)).abs().var(dim=1) * (1.0 / self.T) / (self.L * self.L)
+        return self.spins.to(self.device).mean(dim=(2, 3)).abs().var(dim=1) * (1.0 / self.T) / (self.L * self.L)
 
 
 # =============================================================================
@@ -543,7 +543,7 @@ class PottsModel(MonteCarloSampler):
         Returns:
             Tensor: Energy tensor with shape [batch_size, n_chains].
         """
-        s = self.spins
+        s = self.spins.to(self.device)
         s_up = torch.roll(s, shifts=1, dims=2)
         s_right = torch.roll(s, shifts=-1, dims=3)
 
