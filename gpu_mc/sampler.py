@@ -1,3 +1,4 @@
+import gc
 import torch
 from torch import Tensor
 
@@ -227,7 +228,7 @@ class XYModel(MonteCarloSampler):
         avg_links_y = torch.cos(diff_y).sum(dim=(2, 3)).mean(dim=1)
         avg_currents2_y = (torch.sin(diff_y).sum(dim=(2, 3)) ** 2).mean(dim=1)
         del diff_y, theta
-        return (avg_links_y - (1.0 / self.T) * avg_currents2_y) / (self.L * self.L)
+        return (self.J * avg_links_y - (self.J**2 / self.T) * avg_currents2_y) / (self.L * self.L)
 
     def compute_magnetization(self) -> Tensor:
         r"""Compute the magnetization per site for the XY model.
@@ -255,6 +256,40 @@ class XYModel(MonteCarloSampler):
         m = torch.stack([mx, my], dim=2).norm(dim=2).squeeze(dim=2)
         del theta, mx, my
         return m.var(dim=1) * (1.0 / self.T) / (self.L * self.L)
+
+    def _principal_value(self, delta: Tensor) -> Tensor:
+        """Map angle to range [−π,π].
+
+        Arg:
+            delta: Tensor of shape [num_temp, num_samples, H, W].
+
+        Returns:
+            Tensor of shape [num_temp, num_samples, H, W]. Elements ∈ [−π,π]
+        """
+        return (delta + torch.pi) % (2*torch.pi) - torch.pi
+
+    def compute_vortex_density(self) -> Tensor:
+        """Compute the vortex density for the XY model.
+        https://arxiv.org/pdf/2207.13748#page=25.27
+
+        Returns:
+            Tensor: Vorticity tensor.
+        """
+        theta = self.spins.to(self.device)
+        theta_ip = torch.roll(theta, shifts=-1, dims=-2)      # i+1, j
+        theta_jp = torch.roll(theta, shifts=-1, dims=-1)      # i, j+1
+        theta_ipp_jp = torch.roll(theta_ip, shifts=-1, dims=-1)  # i+1, j+1
+
+        d1 = self._principal_value(delta=theta_jp     - theta)         # (i,j)->(i,j+1)
+        d2 = self._principal_value(delta=theta_ipp_jp - theta_jp)      # (i,j+1)->(i+1,j+1)
+        d3 = self._principal_value(delta=theta_ip     - theta_ipp_jp)  # (i+1,j+1)->(i+1,j)
+        d4 = self._principal_value(delta=theta        - theta_ip)      # (i+1,j)->(i,j)
+
+        omega = d1 + d2 + d3 + d4  # ∈ [−4π,4π]
+        q = torch.round(omega / (2*torch.pi)).to(torch.int32)
+        del theta, theta_ip, theta_jp, theta_ipp_jp, d1, d2, d3, d4, omega
+        gc.collect()
+        return q.to(torch.float).abs().mean(dim=(1, 2, 3))
 
 
 # =============================================================================
