@@ -232,7 +232,7 @@ class MonteCarloSampler(nn.Module, ABC):
                     self.one_sweep()
                     if self.pt_enabled and (sweep % pt_interval == 0):
                         self.parallel_tempering_exchange()
-                    if sweep % 10 == 0:
+                    if sweep % 100 == 0:
                         gc.collect(generation=0)
 
                 gc.collect(generation=1)
@@ -242,7 +242,7 @@ class MonteCarloSampler(nn.Module, ABC):
                     self.one_sweep()
                     if self.pt_enabled and (sweep % pt_interval == 0):
                         self.parallel_tempering_exchange()
-                    if sweep % 10 == 0:
+                    if sweep % 100 == 0:
                         gc.collect(generation=0)
 
                     if sweep % decorrelate == 0:
