@@ -17,32 +17,32 @@ class XYModel(MonteCarloSampler):
     def __init__(self,
                  L: int,
                  T: Tensor,
-                 n_chains: int = 1,
+                 n_chains: int = 30,
                  J: float = 1.0,
                  device: torch.device = torch.device("cpu"),
                  max_delta: float = torch.pi,
                  adaptive: bool = False,
-                 target_acceptance: float = 0.5,
+                 target_acceptance: float = 0.6,
                  adapt_rate: float = 0.1,
-                 adapt_interval: int = 10,
+                 adapt_interval: int = 5,
                  ema_alpha: float = 0.1,
-                 use_amp: bool = False,
+                 use_amp: bool = True,
                  large_size_simulate: bool = False,
                  pt_enabled: bool = True) -> None:
         """
         Args:
             L (int): Lattice size.
             T (Tensor): Temperature tensor.
-            n_chains (int, optional): Number of chains. Defaults to 1.
+            n_chains (int, optional): Number of chains. Defaults to 30.
             J (float, optional): Coupling constant. Defaults to 1.0.
             device (torch.device, optional): Compute device. Defaults to CPU.
             max_delta (float, optional): Maximum angular perturbation. Defaults to π.
             adaptive (bool, optional): Flag to enable adaptive max_delta adjustments. Defaults to False.
-            target_acceptance (float, optional): Target acceptance rate for adaptive updates. Defaults to 0.5.
+            target_acceptance (float, optional): Target acceptance rate for adaptive updates. Defaults to 0.6.
             adapt_rate (float, optional): Adaptation rate. Defaults to 0.1.
-            adapt_interval (int, optional): Number of sweeps between adaptations. Defaults to 10.
+            adapt_interval (int, optional): Number of sweeps between adaptations. Defaults to 5.
             ema_alpha (float, optional): Exponential moving average factor for the acceptance rate. Defaults to 0.1.
-            use_amp (bool, optional): Enable automatic mixed precision. Defaults to False.
+            use_amp (bool, optional): Enable automatic mixed precision. Defaults to True.
             large_size_simulate (bool, optional): Flag for large-scale simulation. Defaults to False.
             pt_enabled (bool, optional): Enable parallel tempering. Defaults to True.
         """
@@ -206,8 +206,20 @@ class XYModel(MonteCarloSampler):
         del theta, t_top, t_right, E_local
         return E_batch
 
-    def compute_heat_capacity(self) -> Tensor:
+    def compute_average_energy(self) -> Tensor:
+        r"""Compute the average energy per site for the XY model.
+
+        Returns:
+            Tensor: Average energy tensor.
+        """
+        return self.compute_energy().mean(dim=1) / self.L**2
+
+    def compute_specific_heat_capacity(self) -> Tensor:
         r"""Compute the heat capacity per site for the XY model.
+        The heat capacity is given by:
+            C = (1 / T^2) * var(E)
+        where var(E) is the variance of the energy.
+        The factor of 1 / L^2 is included to normalize the heat capacity per site.
 
         Returns:
             Tensor: Heat capacity tensor.
@@ -218,7 +230,12 @@ class XYModel(MonteCarloSampler):
 
     def compute_spin_stiffness(self) -> Tensor:
         r"""Compute the spin stiffness for the XY model.
-        https://arxiv.org/pdf/1101.3281
+        The spin stiffness is given by:
+            ρ_s = (J * <cos(θ(i) - θ(i+1))> - (J^2 / T) * <sin(θ(i) - θ(i+1))^2>) / L^2
+        where <...> denotes the average over all sites.
+        The factor of 1 / L^2 is included to normalize the stiffness per site.
+
+        Reference: https://arxiv.org/pdf/1101.3281#page=50
 
         Returns:
             Tensor: Spin stiffness tensor.
@@ -228,11 +245,15 @@ class XYModel(MonteCarloSampler):
         avg_links_y = torch.cos(diff_y).sum(dim=(2, 3)).mean(dim=1)
         avg_currents2_y = (torch.sin(diff_y).sum(dim=(2, 3)) ** 2).mean(dim=1)
         del diff_y, theta
-        return (self.J * avg_links_y - (self.J**2 / self.T) * avg_currents2_y) / (self.L * self.L)
+        return (self.J * avg_links_y - (self.J**2 / self.T) * avg_currents2_y) / self.L**2
 
     def compute_magnetization(self) -> Tensor:
         r"""Compute the magnetization per site for the XY model.
-        https://iopscience.iop.org/article/10.1088/0953-8984/4/24/011
+        The magnetization is given by:
+            m = (1 / L^2) * Σ (m_x^2 + m_y^2)^(1/2)
+        where the sum is over all lattice sites.
+
+        Reference: https://iopscience.iop.org/article/10.1088/0953-8984/4/24/011
 
         Returns:
             Tensor: Magnetization tensor.
@@ -242,10 +263,13 @@ class XYModel(MonteCarloSampler):
         my = torch.sin(theta).sum(dim=(2, 3)).unsqueeze(-1)
         m = torch.stack([mx, my], dim=2).norm(dim=2).squeeze(dim=2)
         del theta, mx, my
-        return m.mean(dim=1) / (self.L * self.L)
+        return m.mean(dim=1) / self.L**2
 
     def compute_susceptibility(self) -> Tensor:
         r"""Compute the susceptibility per site for the XY model.
+        The susceptibility is given by:
+            χ = (1 / T) * var(m)
+        where m is the magnetization per site.
 
         Returns:
             Tensor: Susceptibility tensor.
@@ -255,7 +279,7 @@ class XYModel(MonteCarloSampler):
         my = torch.sin(theta).sum(dim=(2, 3)).unsqueeze(-1)
         m = torch.stack([mx, my], dim=2).norm(dim=2).squeeze(dim=2)
         del theta, mx, my
-        return m.var(dim=1) * (1.0 / self.T) / (self.L * self.L)
+        return m.var(dim=1) * (1.0 / self.T) / self.L**2
 
     def _principal_value(self, delta: Tensor) -> Tensor:
         """Map angle to range [−π,π].
@@ -270,10 +294,15 @@ class XYModel(MonteCarloSampler):
 
     def compute_vortex_density(self) -> Tensor:
         """Compute the vortex density for the XY model.
-        https://arxiv.org/pdf/2207.13748#page=25.27
+        The vortex density is computed using the formula:
+            ρ_v = (1 / L^2) * Σ |ω(i,j)| / (2π)
+        where ω(i,j) is the vorticity tensor at site (i,j).
+        The sum is over all lattice sites, and the factor of 1 / L^2 is included to normalize the density per site.
+
+        Reference: https://arxiv.org/pdf/2207.13748#page=20
 
         Returns:
-            Tensor: Vorticity tensor.
+            Tensor: Vortex density tensor.
         """
         theta = self.spins.to(self.device)
         theta_ip = torch.roll(theta, shifts=-1, dims=-2)      # i+1, j
@@ -304,22 +333,22 @@ class IsingModel(MonteCarloSampler):
     def __init__(self,
                  L: int,
                  T: Tensor,
-                 n_chains: int = 1,
+                 n_chains: int = 30,
                  J: float = 1.0,
                  device: torch.device = torch.device("cpu"),
-                 use_amp: bool = False,
+                 use_amp: bool = True,
                  large_size_simulate: bool = False,
-                 pt_enabled: bool = True) -> None:
+                 pt_enabled: bool = False) -> None:
         """
         Args:
             L (int): Lattice size.
             T (Tensor): Temperature tensor.
-            n_chains (int, optional): Number of chains. Defaults to 1.
+            n_chains (int, optional): Number of chains. Defaults to 30.
             J (float, optional): Coupling constant. Defaults to 1.0.
             device (torch.device, optional): Compute device. Defaults to CPU.
-            use_amp (bool, optional): Enable automatic mixed precision. Defaults to False.
+            use_amp (bool, optional): Enable automatic mixed precision. Defaults to True.
             large_size_simulate (bool, optional): Flag for large-scale simulation. Defaults to False.
-            pt_enabled (bool, optional): Enable parallel tempering. Defaults to True.
+            pt_enabled (bool, optional): Enable parallel tempering. Defaults to False.
         """
         super().__init__(
             L=L,
@@ -418,31 +447,98 @@ class IsingModel(MonteCarloSampler):
         del s, s_up, s_right, E_local
         return E_batch
 
-    def compute_heat_capacity(self) -> Tensor:
+    def compute_average_energy(self) -> Tensor:
+        r"""Compute the average energy per site for the Ising model.
+
+        Returns:
+            Tensor: Average energy tensor.
+        """
+        return self.compute_energy().mean(dim=1) / self.L**2
+
+    def compute_specific_heat_capacity(self) -> Tensor:
         r"""Compute the heat capacity per site for the Ising model.
+        The heat capacity is given by:
+            C = (1 / T^2) * var(E)
+        where var(E) is the variance of the energy.
+        The factor of 1 / L^2 is included to normalize the heat capacity per site.
 
         Returns:
             Tensor: Heat capacity tensor.
         """
-        T = self.T.to(self.device)
-        c = torch.var(self.compute_energy(), dim=1) / T**2
+        c = torch.var(self.compute_energy(), dim=1) / self.T.to(self.device)**2
         return c / self.L**2
 
     def compute_magnetization(self) -> Tensor:
         r"""Compute the magnetization per site for the Ising model.
+        The magnetization is given by:
+            m = (1 / L^2) * Σ s(i)
+        where the sum is over all lattice sites.
 
         Returns:
             Tensor: Magnetization tensor.
         """
-        return self.spins.mean(dim=(2, 3)).abs().mean(dim=1)
+        return self.spins.to(self.device).mean(dim=(2, 3)).abs().mean(dim=1)
 
     def compute_susceptibility(self) -> Tensor:
         r"""Compute the susceptibility per site for the Ising model.
+        The susceptibility is given by:
+            χ = (1 / T) * var(m)
+        where m is the magnetization per site.
 
         Returns:
             Tensor: Susceptibility tensor.
         """
-        return self.spins.to(self.device).mean(dim=(2, 3)).abs().var(dim=1) * (1.0 / self.T) / (self.L * self.L)
+        return self.spins.to(self.device).mean(dim=(2, 3)).abs().var(dim=1) * (1.0 / self.T.to(self.device)) / self.L**2
+
+    def compute_binder_cumulant(self) -> Tensor:
+        r"""Compute the Binder cumulant for the Ising model.
+
+        The Binder cumulant is given by:
+            U_4 = 1 - (1 / 3) * (《m^4》 / 《m^2》)
+        where m^2 is the square of the magnetization and m^4 is the fourth moment of the magnetization.
+
+        Returns:
+            Tensor: Binder cumulant tensor.
+        """
+        m2 = self.spins.to(self.device).mean(dim=(2, 3)).pow(2).mean(dim=1)
+        m4 = self.spins.to(self.device).mean(dim=(2, 3)).pow(4).mean(dim=1)
+        return 1.0 - m4.div(3.0 * m2 * m2)
+
+    def compute_domain_wall_density(self) -> Tensor:
+        r"""Compute the domain wall density for the Ising model.
+
+        The domain wall density is given by:
+            ρ_dw = ⟨(1−s_i s_j)/2⟩
+        where the average is taken over all pairs of neighboring spins.
+
+        Returns:
+            Tensor: Domain wall density tensor.
+        """
+        spins = self.spins.to(self.device)
+        shift_x = spins.roll(shifts=-1, dims=3)
+        shift_y = spins.roll(shifts=1, dims=2)
+        dw_x = (1 - spins * shift_x) / 2
+        dw_y = (1 - spins * shift_y) / 2
+        dw_density = (dw_x + dw_y).mean(dim=(2, 3))
+        return dw_density.mean(dim=1)
+
+    def compute_exact_magnetization(self) -> Tensor:
+        r"""Compute the exact spontaneous magnetization for the Ising model.
+
+        The spontaneous magnetization is given by:
+            m = (1 - sinh(2 * J / T)^(-4))^(1/8)
+        This formula is valid for T < 2J / log(1 + sqrt(2)).
+        The function returns 0 for T >= 2J / log(1 + sqrt(2)).
+
+        Reference: https://journals.aps.org/pr/abstract/10.1103/PhysRev.85.808
+
+        Returns:
+            Tensor: Exact spontaneous magnetization tensor.
+        """
+        k = self.J / self.T
+        kc = 0.5 * torch.log(1 + torch.sqrt(2 * torch.ones_like(self.T)))
+        m = (1 - (1/torch.sinh(2 * k)).pow(4)).pow(0.125)
+        return m.masked_fill_(k<=kc, 0.0)
 
 
 # =============================================================================
@@ -593,8 +689,20 @@ class PottsModel(MonteCarloSampler):
         del s, s_up, s_right, match_up, match_right, E_local
         return E_batch
 
-    def compute_heat_capacity(self) -> Tensor:
+    def compute_average_energy(self) -> Tensor:
+        r"""Compute the average energy per site for the Potts model.
+
+        Returns:
+            Tensor: Average energy tensor.
+        """
+        return self.compute_energy().mean(dim=1) / self.L**2
+
+    def compute_specific_heat_capacity(self) -> Tensor:
         r"""Compute the heat capacity per site for the Potts model.
+        The heat capacity is given by:
+            C = (1 / T^2) * var(E)
+        where var(E) is the variance of the energy.
+        The factor of 1 / L^2 is included to normalize the heat capacity per site.
 
         Returns:
             Tensor: Heat capacity tensor with shape [batch_size].
