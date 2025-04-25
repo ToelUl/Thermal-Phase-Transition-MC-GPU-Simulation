@@ -1,6 +1,7 @@
 import gc
 import torch
 from torch import Tensor
+import torch.nn.functional as F
 
 from .base import MonteCarloSampler
 
@@ -494,7 +495,7 @@ class IsingModel(MonteCarloSampler):
         r"""Compute the Binder cumulant for the Ising model.
 
         The Binder cumulant is given by:
-            U_4 = 1 - (1 / 3) * (《m^4》 / 《m^2》)
+            U_4 = 1 - (1 / 3) * (《m^4》 / 《m^2》^2)
         where m^2 is the square of the magnetization and m^4 is the fourth moment of the magnetization.
 
         Returns:
@@ -561,7 +562,7 @@ class PottsModel(MonteCarloSampler):
                  device: torch.device = torch.device("cpu"),
                  use_amp: bool = False,
                  large_size_simulate: bool = False,
-                 pt_enabled: bool = True) -> None:
+                 pt_enabled: bool = False) -> None:
         """
         Args:
             L (int): Lattice size.
@@ -572,9 +573,12 @@ class PottsModel(MonteCarloSampler):
             device (torch.device, optional): Compute device. Defaults to CPU.
             use_amp (bool, optional): Enable automatic mixed precision. Defaults to False.
             large_size_simulate (bool, optional): Flag for large-scale simulation. Defaults to False.
-            pt_enabled (bool, optional): Enable parallel tempering. Defaults to True.
+            pt_enabled (bool, optional): Enable parallel tempering. Defaults to False.
         """
+        if q < 2:
+            raise ValueError("q must be ≥2.")
         self.q = q
+
         super().__init__(
             L=L,
             T=T,
@@ -710,4 +714,70 @@ class PottsModel(MonteCarloSampler):
         T = self.T.to(self.device)
         energy = self.compute_energy()  # Shape: [batch_size, n_chains]
         c = torch.var(energy, dim=1) / (T**2)
-        return c / (self.L**2)
+        return c / self.L**2
+
+    def compute_magnetization(self) -> Tensor:
+        r"""Compute the magnetization per site for the Potts model.
+        The magnetization is given by:
+            n_α = (1 / L^2) * Σ delta(s(i), s(j))
+            Σ n_α = 1
+            m = (q * n_α_max - 1) / (q - 1)
+        where the sum is over all lattice sites and n_α_max is the maximum occupancy fraction.
+
+        Returns:
+            Tensor: Magnetization tensor with shape [batch_size].
+        """
+        spins = self.spins.to(self.device)
+        # One-hot encode → shape (*batch, *dims, q)
+        one_hot = F.one_hot(spins, num_classes=self.q).to(torch.float32)
+        # Occupancy fractions along spatial dims
+        n_alpha = one_hot.mean(dim=(2, 3))  # (*batch, q)
+        # Max-colour definition
+        m_scalar = (self.q * n_alpha.max(dim=-1).values - 1) / (self.q - 1)
+        return m_scalar.mean(dim=1)
+
+    def compute_susceptibility(self) -> Tensor:
+        r"""Compute the susceptibility per site for the Potts model.
+        The susceptibility is given by:
+            χ = (1 / T) * var(m)
+        where m is the magnetization per site.
+
+        Returns:
+            Tensor: Susceptibility tensor.
+        """
+        spins = self.spins.to(self.device)
+        n_alpha = F.one_hot(spins, num_classes=self.q).to(torch.float32).mean(dim=(2, 3))
+        m_scalar = (self.q * n_alpha.max(dim=-1).values - 1) / (self.q - 1)
+        return m_scalar.var(dim=1) / self.T.to(self.device)
+
+    def compute_binder_cumulant(self) -> Tensor:
+        r"""Compute the Binder cumulant for the Potts model.
+
+        The Binder cumulant is given by:
+            U_4 = 1 - (1 / 3) * (《m^4》 / 《m^2》^2)
+        where m^2 is the square of the magnetization and m^4 is the fourth moment of the magnetization.
+
+        Returns:
+            Tensor: Binder cumulant tensor.
+        """
+        spins = self.spins.to(self.device)
+        n_alpha = F.one_hot(spins, num_classes=self.q).to(torch.float32).mean(dim=(2, 3))
+        m_scalar = (self.q * n_alpha.max(dim=-1).values - 1) / (self.q - 1)
+        m2 = m_scalar.pow(2).mean(dim=1)
+        m4 = m_scalar.pow(4).mean(dim=1)
+        return 1.0 - m4.div(3.0 * m2 * m2)
+
+    def compute_entropy(self) -> Tensor:
+        r"""Compute the entropy per site for the Potts model.
+
+        The entropy is given by:
+            S = -Σ p_i * log(p_i)
+        where p_i is the probability of each state.
+
+        Returns:
+            Tensor: Entropy tensor with shape [batch_size].
+        """
+        spins = self.spins.to(self.device)
+        n_alpha = F.one_hot(spins, num_classes=self.q).to(torch.float32).mean(dim=(2, 3))
+        entropy = -torch.sum(n_alpha * torch.log(n_alpha + 1e-10), dim=-1)
+        return entropy.mean(dim=1)

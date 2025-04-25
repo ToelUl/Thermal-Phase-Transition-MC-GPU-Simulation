@@ -232,7 +232,7 @@ class MonteCarloSampler(nn.Module, ABC):
                     self.one_sweep()
                     if self.pt_enabled and (sweep % pt_interval == 0):
                         self.parallel_tempering_exchange()
-                    if sweep % 100 == 0:
+                    if sweep % 1000 == 0:
                         gc.collect(generation=0)
 
                 gc.collect(generation=1)
@@ -242,7 +242,7 @@ class MonteCarloSampler(nn.Module, ABC):
                     self.one_sweep()
                     if self.pt_enabled and (sweep % pt_interval == 0):
                         self.parallel_tempering_exchange()
-                    if sweep % 100 == 0:
+                    if sweep % 1000 == 0:
                         gc.collect(generation=0)
 
                     if sweep % decorrelate == 0:
@@ -318,3 +318,49 @@ class MonteCarloSampler(nn.Module, ABC):
         # Clean up intermediate variables.
         del B, C, energies, T_b, idx, start_idx, partner_idx, E_start, E_partner, T_start, T_partner, delta, prob, rand_vals, swap_mask
         gc.collect(generation=0)
+
+    @staticmethod
+    def high_precision_derivative(
+        seq: torch.Tensor,
+        spacing: float = 1.0
+    ) -> Tensor:
+        """Compute first derivative of a 1D tensor with 4th-order central differences
+        and 2nd-order forward/backward differences at boundaries.
+
+        Uses in-place operations and vectorized slicing for performance.
+
+        Args:
+            seq (torch.Tensor): 1D tensor of function samples, shape (N,).
+            spacing (float): Grid spacing h between samples. Defaults to 1.0.
+
+        Returns:
+            torch.Tensor: Tensor of shape (N,) with derivative approximations.
+
+        Raises:
+            ValueError: If `seq` is not 1D or length < 5.
+        """
+        if seq.ndim != 1:
+            raise ValueError("Input tensor must be 1D.")
+        N = seq.size(0)
+        if N < 5:
+            raise ValueError("Length of seq must be at least 5 for 4th-order accuracy.")
+        # allocate output
+        deriv = torch.empty_like(seq)
+
+        # 4th-order central diff for interior points [2, N-3]
+        # deriv[2:-2] = (-f[i+2] + 8f[i+1] - 8f[i-1] + f[i-2]) / (12h)
+        deriv[2:-2].copy_(-seq[4:])                      # -f[i+2]
+        deriv[2:-2].add_(seq[3:-1], alpha=8)             # +8 f[i+1]
+        deriv[2:-2].add_(seq[1:-3], alpha=-8)            # -8 f[i-1]
+        deriv[2:-2].add_(seq[0:-4])                      # + f[i-2]
+        deriv[2:-2].div_(12 * spacing)                   # divide by 12h
+
+        # 2nd-order forward difference at the left boundary
+        deriv[0] = (-3 * seq[0] + 4 * seq[1] - seq[2]) / (2 * spacing)
+        deriv[1] = (     seq[2] -     seq[0]) / (2 * spacing)
+
+        # 2nd-order backward difference at the right boundary
+        deriv[-2] = (     seq[-1] -     seq[-3]) / (2 * spacing)
+        deriv[-1] = ( 3 * seq[-1] - 4 * seq[-2] + seq[-3]) / (2 * spacing)
+
+        return deriv
