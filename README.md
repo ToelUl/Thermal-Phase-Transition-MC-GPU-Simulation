@@ -89,7 +89,8 @@ T_start = 0.1 # Start temperature
 T_end = 2.0 # End temperature
 precision = 0.05 # Temperature precision
 device = "cuda:0"
-T = torch.linspace(T_start, T_end, int((T_end-T_start)//precision)+1, device=device)
+steps = int((T_end-T_start)//precision) + 1
+T = torch.linspace(T_start, T_end, steps, device=device)
 ensemble_number = 3000 # Number of samples
 n_chains = 30 # Number of parallel chains. Suggested: 10~50
 pt_interval = 2 # Parallel tempering interval. Suggested: 1~5
@@ -166,7 +167,8 @@ T_start = 1.0 # Start temperature
 T_end = 3.5 # End temperature
 precision = 0.05 # Temperature precision
 device = "cuda:0"
-T = torch.linspace(T_start, T_end, int((T_end-T_start)//precision)+1, device=device)
+steps = int((T_end-T_start)//precision) + 1
+T = torch.linspace(T_start, T_end, steps, device=device)
 ensemble_number = 3000 # Number of samples
 n_chains = 30 # Number of parallel chains. Suggested: 10~50
 factor_therm = 5 # 10~50
@@ -235,7 +237,8 @@ T_start = 0.5 # Start temperature
 T_end = 1.5 # End temperature
 precision = 0.03 # Temperature precision
 device = "cuda:0"
-T = torch.linspace(T_start, T_end, int((T_end-T_start)//precision)+1, device=device)
+steps = int((T_end-T_start)//precision) + 1
+T = torch.linspace(T_start, T_end, steps, device=device)
 ensemble_number = 3000 # Number of samples
 n_chains = 30 # Number of parallel chains. Suggested: 10~50
 factor_therm = 5 # 10~50
