@@ -33,7 +33,7 @@ Monte Carlo simulations in statistical physics help explore phase transitions an
 $$
 P_{\text{acc}} = \min\left(1, \exp\left(-\frac{\Delta E}{T}\right)\right)
 $$
-where $\left(\Delta E\right)$ is the energy change and \(T\) is the temperature. The use of parallel tempering further improves exploration of the energy landscape by periodically swapping configurations between temperature chains.
+where $\left(\Delta E\right)$ is the energy change and $\left(T\right)$ is the temperature. The use of parallel tempering further improves exploration of the energy landscape by periodically swapping configurations between temperature chains.
 
 ### Models Included
 
@@ -41,7 +41,7 @@ where $\left(\Delta E\right)$ is the energy change and \(T\) is the temperature.
   Spins are continuous, represented by an angle $\left(\theta \in [0, 2\pi)\right)$.  
   Energy:  
 $$
-  E = -J \sum_{\langle i,j \rangle} \cos(\theta_i - \theta_j)
+E = -J \sum_{\langle i,j \rangle} \cos(\theta_i - \theta_j)
 $$
   *Adaptive updates* can be applied to adjust the angular perturbation dynamically.
 
@@ -49,21 +49,21 @@ $$
   Spins take values $\left(\pm1\right)$.  
   Energy:  
 $$
-  E = -J \sum_{\langle i,j \rangle} s_i s_j
+E = -J \sum_{\langle i,j \rangle} s_i s_j
 $$
 
 - **Potts Model:**  
   Spins take integer values in $\left(\{0, 1, \dots, q-1\}\right)$.  
   Energy is computed using the Kronecker delta:
 $$
-  E = -J \sum_{\langle i,j \rangle} \delta(s_i, s_j)
+E = -J \sum_{\langle i,j \rangle} \delta(s_i, s_j)
 $$
 
 ---
 
 ## 3. System Requirements
 
-- Python 3.7 or higher
+- Python 3.9 or higher
 - [PyTorch](https://pytorch.org/) with CUDA support (if using GPU acceleration)
 - Other dependencies as listed in the provided `requirements.txt`
 
