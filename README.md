@@ -74,103 +74,215 @@ where \(\Delta E\) is the energy change and \(T\) is the temperature. The use of
 ### XY Model Simulation
 ```bash
 import time
+
+try:
+    from gpu_mc import XYModel
+except ModuleNotFoundError:
+    !git clone https://github.com/ToelUl/Thermal-Phase-Transition-MC-GPU-Simulation.git
+    !cp -r Thermal-Phase-Transition-MC-GPU-Simulation/gpu_mc ./
+    from gpu_mc import XYModel
+
 import torch
 
-# Set lattice size and temperature range
-L = 32
-T = torch.linspace(0.6, 1.5, steps=32)
+L = 32 # Lattice size
+T_start = 0.1 # Start temperature
+T_end = 2.0 # End temperature
+precision = 0.05 # Temperature precision
+device = "cuda:0"
+T = torch.linspace(T_start, T_end, int((T_end-T_start)//precision)+1, device=device)
+ensemble_number = 3000 # Number of samples
+n_chains = 30 # Number of parallel chains. Suggested: 10~50
+pt_interval = 2 # Parallel tempering interval. Suggested: 1~5
+pt_prob = 0.1 # Parallel tempering probability 0.1~0.5
+tau_pt = pt_interval / pt_prob # Autocorrelation time for parallel tempering
+factor_therm = 15 # 10~50
+factor_decorrelate = 2 # 1~10
+tau = L**2 # Autocorrelation time
+tau_eff = (tau_pt * tau) / (tau_pt + tau) # Effective Autocorrelation time
+n_therm =  int(factor_therm * tau) # Number of thermalization sweeps
+decorrelate = int(factor_decorrelate * tau_eff) # Number of decorrelation sweeps
+n_sweeps = int(ensemble_number / n_chains) * decorrelate # Number of sweeps
 
-# Initialize the XY model sampler with CUDA acceleration, AMP enabled, and parallel tempering
+print(f"Lattice size: {L}")
+print(f"Temperature range: {T_start} to {T_end}")
+print(f"Number of temperatures: {len(T)}")
+print(f"Number of samples per temperature: {ensemble_number}")
+print(f"Number of sweeps: {n_sweeps}")
+print(f"Number of thermalization sweeps: {n_therm}")
+print(f"Number of chains: {n_chains}")
+print(f"Number of decorrelate: {decorrelate}")
+
 sampler_xy = XYModel(
     L=L,
     T=T,
-    n_chains=30, # Number of temperature chains for parallel tempering
-    adaptive=False,  
-    target_acceptance=0.5,
-    adapt_rate=0.1,
-    device=torch.device("cuda"),
+    n_chains=n_chains,
+    # adaptive=True,
+    # target_acceptance=0.6,
+    # adapt_rate=0.1,
+    device=torch.device(device),
     use_amp=True,
-    pt_enabled=True  # Parallel tempering enabled for better sampling
-)
+    pt_enabled=True, # Suggestions: Parallel tempering enabled for better sampling.
+    )
 
 start = time.time()
-# Run simulation: 10000 sweeps for thermalization and 3000 sweeps for production,
-# with samples recorded every 10 sweeps and parallel tempering every 10 sweeps.
-samples_xy = sampler_xy(n_sweeps=3000, n_therm=10000, decorrelate=10, pt_interval=10)
+samples_xy = sampler_xy(
+    n_sweeps=n_sweeps,
+    n_therm=n_therm,
+    decorrelate=decorrelate,
+    pt_interval=pt_interval
+)
 end = time.time()
 print(f"Elapsed time: {end - start:.2f} s")
-print(f"Samples shape: {samples_xy.shape}")
+print(f"Samples shape: {samples_ising.shape}")
 
 # Update spins with the collected samples and compute physical observables.
 sampler_xy.spins = samples_xy
-energy_xy = sampler_xy.compute_energy().mean(dim=1).cpu().numpy() / L**2
-capacity_xy = sampler_xy.compute_heat_capacity().cpu().numpy()
+
+energy_xy = sampler_xy.compute_average_energy().cpu().numpy()
+capacity_xy = sampler_xy.compute_specific_heat_capacity().cpu().numpy()
 stiffness_xy = sampler_xy.compute_spin_stiffness().cpu().numpy()
+magnetization_xy = sampler_xy.compute_magnetization().cpu().numpy()
+susceptibility_xy = sampler_xy.compute_susceptibility().cpu().numpy()
+vortex_density_xy = sampler_xy.compute_vortex_density().cpu().numpy()
+temp = sampler_xy.T.cpu().numpy()
 
 ```
 
 ### Ising Model Simulation
 ```bash
 import time
+
+try:
+    from gpu_mc import IsingModel
+except ModuleNotFoundError:
+    !git clone https://github.com/ToelUl/Thermal-Phase-Transition-MC-GPU-Simulation.git
+    !cp -r Thermal-Phase-Transition-MC-GPU-Simulation/gpu_mc ./
+    from gpu_mc import IsingModel
+
 import torch
 
-L = 32
-T = torch.linspace(1.0, 3.5, steps=32)
+L = 16 # Lattice size
+T_start = 1.0 # Start temperature
+T_end = 3.5 # End temperature
+precision = 0.05 # Temperature precision
+device = "cuda:0"
+T = torch.linspace(T_start, T_end, int((T_end-T_start)//precision)+1, device=device)
+ensemble_number = 3000 # Number of samples
+n_chains = 30 # Number of parallel chains. Suggested: 10~50
+factor_therm = 5 # 10~50
+factor_decorrelate = 1 # 1~10
+tau = L**2 # Autocorrelation time
+n_therm =  int(factor_therm * tau) # Number of thermalization sweeps
+decorrelate = int(factor_decorrelate * L) # Number of decorrelation sweeps
+n_sweeps = int(ensemble_number / n_chains) * decorrelate # Number of sweeps
 
-# Initialize the Ising model sampler with CUDA acceleration and AMP enabled
+print(f"Lattice size: {L}")
+print(f"Temperature range: {T_start} to {T_end}")
+print(f"Number of temperatures: {len(T)}")
+print(f"Number of samples per temperature: {ensemble_number}")
+print(f"Number of sweeps: {n_sweeps}")
+print(f"Number of thermalization sweeps: {n_therm}")
+print(f"Number of chains: {n_chains}")
+print(f"Number of decorrelate: {decorrelate}")
+
 sampler_ising = IsingModel(
     L=L,
     T=T,
-    n_chains=30,
-    device=torch.device("cuda"),
-    use_amp=True,
-    pt_enabled=False  
-)
+    n_chains=n_chains,
+    device=torch.device(device),
+    )
 
 start = time.time()
-# Run simulation: 3000 sweeps for thermalization and 1000 sweeps for production,
-# with samples recorded every 10 sweeps.
-samples_ising = sampler_ising(n_sweeps=1000, n_therm=3000, decorrelate=10)
+samples_ising = sampler_ising(
+    n_sweeps=n_sweeps,
+    n_therm=n_therm,
+    decorrelate=decorrelate
+)
 end = time.time()
 print(f"Elapsed time: {end - start:.2f} s")
 print(f"Samples shape: {samples_ising.shape}")
 
+# Update spins with the collected samples and compute physical observables.
 sampler_ising.spins = samples_ising
-energy_ising = sampler_ising.compute_energy().mean(dim=1).cpu().numpy() / L**2
-capacity_ising = sampler_ising.compute_heat_capacity().cpu().numpy()
+
+energy_ising = sampler_ising.compute_average_energy().cpu().numpy()
+capacity_ising = sampler_ising.compute_specific_heat_capacity().cpu().numpy()
 magnetization_ising = sampler_ising.compute_magnetization().cpu().numpy()
+exact_magnetization_ising = sampler_ising.compute_exact_magnetization().cpu().numpy()
+susceptibility_ising = sampler_ising.compute_susceptibility().cpu().numpy()
+binder_cumulant_ising = sampler_ising.compute_binder_cumulant().cpu().numpy()
+domain_wall_density_ising = sampler_ising.compute_domain_wall_density().cpu().numpy()
+temp = sampler_ising.T.cpu().numpy()
 
 ```
 
 ### Potts Model Simulation
 ```bash
 import time
+
+try:
+    from gpu_mc import PottsModel
+except ModuleNotFoundError:
+    !git clone https://github.com/ToelUl/Thermal-Phase-Transition-MC-GPU-Simulation.git
+    !cp -r Thermal-Phase-Transition-MC-GPU-Simulation/gpu_mc ./
+    from gpu_mc import PottsModel
+
 import torch
 
-L = 32
-T = torch.linspace(0.5, 1.5, steps=32)
+L = 16 # Lattice size
+q = 3 # Number of states in the Potts model
+T_start = 0.5 # Start temperature
+T_end = 1.5 # End temperature
+precision = 0.03 # Temperature precision
+device = "cuda:0"
+T = torch.linspace(T_start, T_end, int((T_end-T_start)//precision)+1, device=device)
+ensemble_number = 3000 # Number of samples
+n_chains = 30 # Number of parallel chains. Suggested: 10~50
+factor_therm = 5 # 10~50
+factor_decorrelate = 1 # 1~10
+tau = L**2 # Autocorrelation time
+n_therm =  int(factor_therm * tau) # Number of thermalization sweeps
+decorrelate = int(factor_decorrelate * L) # Number of decorrelation sweeps
+n_sweeps = int(ensemble_number / n_chains) * decorrelate # Number of sweeps
 
-# Initialize the Potts model sampler with q=3, CUDA acceleration, and AMP enabled
+print(f"Lattice size: {L}")
+print(f"Number of states: {q}")
+print(f"Temperature range: {T_start} to {T_end}")
+print(f"Number of temperatures: {len(T)}")
+print(f"Number of samples per temperature: {ensemble_number}")
+print(f"Number of sweeps: {n_sweeps}")
+print(f"Number of thermalization sweeps: {n_therm}")
+print(f"Number of chains: {n_chains}")
+print(f"Number of decorrelate: {decorrelate}")
+
 sampler_potts = PottsModel(
     L=L,
     T=T,
-    q=3,
-    n_chains=30,
-    device=torch.device("cuda"),
+    q=q,
+    n_chains=n_chains,
+    device=torch.device(device),
     use_amp=True,
-    pt_enabled=False  
-)
+    )
 
 start = time.time()
-# Run simulation: 5000 sweeps for thermalization and 1000 sweeps for production,
-# with samples recorded every 10 sweeps.
-samples_potts = sampler_potts(n_sweeps=1000, n_therm=5000, decorrelate=10)
+samples_potts = sampler_potts(
+    n_sweeps=n_sweeps,
+    n_therm=n_therm,
+    decorrelate=decorrelate
+)
 end = time.time()
 print(f"Elapsed time: {end - start:.2f} s")
 print(f"Samples shape: {samples_potts.shape}")
 
+# Update spins with the collected samples and compute physical observables.
 sampler_potts.spins = samples_potts
-energy_potts = sampler_potts.compute_energy().mean(dim=1).cpu().numpy() / L**2
-capacity_potts = sampler_potts.compute_heat_capacity().cpu().numpy()
+
+energy_potts = sampler_potts.compute_average_energy().cpu().numpy()
+capacity_potts = sampler_potts.compute_specific_heat_capacity().cpu().numpy()
+magnetization_potts = sampler_potts.compute_magnetization().cpu().numpy()
+susceptibility_potts = sampler_potts.compute_susceptibility().cpu().numpy()
+binder_cumulant_potts = sampler_potts.compute_binder_cumulant().cpu().numpy()
+entropy_potts = sampler_potts.compute_entropy().cpu().numpy()
+temp = sampler_potts.T.cpu().numpy()
 
 ```
