@@ -2,6 +2,9 @@
 
 This project implements Monte Carlo simulations for studying thermal phase transitions using PyTorch. It leverages CUDA acceleration, a checkerboard (alternating) Metropolis update scheme, and parallel tempering to improve sampling efficiency. Models implemented include the XY model, Ising model, and q-state Potts model.
 
+## Documentation
+[![Docs](https://img.shields.io/badge/docs-latest-blue.svg)](https://deepwiki.com/ToelUl/Thermal-Phase-Transition-MC-GPU-Simulation)
+
 ## Run Notebooks on Google Colab
 
 - [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ToelUl/Thermal-Phase-Transition-MC-GPU-Simulation/blob/main/Ising_model.ipynb) **Ising model Demo**
