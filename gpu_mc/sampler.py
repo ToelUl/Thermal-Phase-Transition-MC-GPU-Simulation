@@ -489,7 +489,7 @@ class IsingModel(MonteCarloSampler):
         Returns:
             Tensor: Susceptibility tensor.
         """
-        return self.spins.to(self.device).mean(dim=(2, 3)).abs().var(dim=1) * (1.0 / self.T.to(self.device)) / self.L**2
+        return self.spins.to(self.device).mean(dim=(2, 3)).abs().var(dim=1) / self.T.to(self.device)
 
     def compute_binder_cumulant(self) -> Tensor:
         r"""Compute the Binder cumulant for the Ising model.
