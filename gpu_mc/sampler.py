@@ -99,6 +99,7 @@ class XYModel(MonteCarloSampler):
             if self.sweep_count % self.adapt_interval == 0:
                 self.adjust_max_delta()
 
+    @torch.compile
     def metropolis_update_sub_lattice(self, lattice_color: str, adaptive: bool = False) -> None:
         r"""Perform a Metropolis update on the specified sub-lattice for the XY model.
 
@@ -373,6 +374,7 @@ class IsingModel(MonteCarloSampler):
         spins_init = 2 * spins_init - 1
         self.spins = spins_init
 
+    @torch.compile
     def metropolis_update_sub_lattice(self, lattice_color: str, adaptive: bool = False) -> None:
         r"""Perform the Metropolis update on the specified sub-lattice for the Ising model.
 
@@ -603,6 +605,7 @@ class PottsModel(MonteCarloSampler):
         )
         self.spins = spins_init
 
+    @torch.compile
     def metropolis_update_sub_lattice(self, lattice_color: str, adaptive: bool = False) -> None:
         r"""Perform the Metropolis update on the specified sub-lattice for the Potts model.
 
