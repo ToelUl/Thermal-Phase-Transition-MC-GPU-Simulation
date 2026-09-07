@@ -638,14 +638,25 @@ class PottsModel(MonteCarloSampler):
 
         s_old = self.spins[batch_idx, chain_idx, i_sites, j_sites]
 
-        # Propose a new state different from the current state.
-        s_rand = torch.randint(
-            0, self.q,
+        # Propose uniformly among the q-1 states different from the current state.
+        #
+        # offset is uniformly sampled from {1, ..., q-1}, so for any two
+        # distinct Potts states a != b,
+        #
+        #     Q(a -> b) = 1 / (q - 1) = Q(b -> a),
+        #
+        # and the standard Metropolis acceptance probability
+        # min(1, exp(-DeltaE / T)) satisfies detailed balance.
+
+        offset = torch.randint(
+            1,
+            self.q,
             (self.batch_size, self.n_chains, N),
             device=self.device,
             dtype=torch.int64
         )
-        s_new = torch.where(s_rand == s_old, (s_rand + 1) % self.q, s_rand)
+
+        s_new = (s_old + offset) % self.q
 
         # Retrieve neighbor spins.
         s_neighbors = self.spins[
@@ -671,7 +682,7 @@ class PottsModel(MonteCarloSampler):
         s_updated = torch.where(accept_mask, s_new, s_old)
         self.spins[batch_idx, chain_idx, i_sites, j_sites] = s_updated
 
-        del s_rand, s_new, s_old, s_neighbors, matches_old, matches_new, delta_E, T_exp, rand_vals, p_acc, accept_mask, s_updated
+        del offset, s_new, s_old, s_neighbors, matches_old, matches_new, delta_E, T_exp, rand_vals, p_acc, accept_mask, s_updated
 
     def compute_energy(self) -> Tensor:
         r"""Compute the energy of the Potts model.
@@ -740,18 +751,40 @@ class PottsModel(MonteCarloSampler):
         return m_scalar.mean(dim=1)
 
     def compute_susceptibility(self) -> Tensor:
-        r"""Compute the susceptibility per site for the Potts model.
-        The susceptibility is given by:
-            χ = (1 / T) * var(m)
-        where m is the magnetization per site.
+        r"""Compute the magnetic susceptibility per lattice site
+        for the q-state Potts model.
+
+        The scalar Potts magnetization is
+
+            m = (q * n_max - 1) / (q - 1),
+
+        where n_max is the largest occupancy fraction among the q
+        Potts states.
+
+        Since m is an intensive magnetization and N = L^2,
+
+            chi = (N / T) * ( <m^2> - <m>^2 ).
 
         Returns:
-            Tensor: Susceptibility tensor.
+            Tensor: Susceptibility with shape [batch_size].
         """
         spins = self.spins.to(self.device)
-        n_alpha = F.one_hot(spins, num_classes=self.q).to(torch.float32).mean(dim=(2, 3))
-        m_scalar = (self.q * n_alpha.max(dim=-1).values - 1) / (self.q - 1)
-        return m_scalar.var(dim=1) / self.T.to(self.device)
+
+        n_alpha = F.one_hot(
+            spins,
+            num_classes=self.q
+        ).to(torch.float32).mean(dim=(2, 3))
+
+        m_scalar = (self.q * n_alpha.max(dim=-1).values - 1.0) / (self.q - 1.0)
+
+        m_mean = m_scalar.mean(dim=1)
+        m2_mean = m_scalar.pow(2).mean(dim=1)
+
+        variance = m2_mean - m_mean.pow(2)
+
+        N = self.L ** 2
+
+        return N * variance / self.T.to(self.device)
 
     def compute_binder_cumulant(self) -> Tensor:
         r"""Compute the Binder cumulant for the Potts model.
